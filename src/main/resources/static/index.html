@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>趣学收银系统</title>
+    <!-- 公共样式 -->
+    <link rel="stylesheet" href="css/base.css"/>
+    <!-- 页面整体 + 头部样式 -->
+    <link rel="stylesheet" href="css/index.css"/>
+    <!-- 左侧扫码部分  -->
+    <link rel="stylesheet" href="css/scan.css"/>
+    <!-- 右侧支付部分  -->
+    <link rel="stylesheet" href="css/paid.css"/>
+    <script src="./js/vue.min.js"></script>
+    <script src="./js/axios.min.js"></script>
+</head>
+<body>
+<div class="quxue-shouyin" id="app">
+    <div class="shouyin-header">
+        <h1>面向工资编程</h1>
+    </div>
+    <div class="shouyin-main">
+        <!-- 左侧扫码部分 -->
+        <div class="scan-area">
+            <div class="scan-form">
+                <input
+                        type="text"
+                        class="input-box"
+                        :value="goodsCode"
+                        placeholder="请输入扫描商品条形码"
+                        @keydown="showGoods"
+                />
+                <input type="button" class="btn-box" value="确认"/>
+            </div>
+            <div class="scan-list">
+                <div class="scan-list-content">
+                    <table cellspacing="0">
+                        <thead>
+                        <tr>
+                            <th>品名</th>
+                            <th>数量</th>
+                            <th>单价</th>
+                            <th>小计</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr v-for="(goods,index) in goodsList">
+                            <td>{{goods.name}}</td>
+                            <td>
+                                <input
+                                        type="button"
+                                        value="-"
+                                        @click="reduceCount(index)"
+                                />
+                                <input
+                                        type="text"
+                                        :value="goods.count"
+                                        v-model="goods.count"
+                                        style="width: 30px; text-align: center"
+                                        @input="countInput($event.target.value,index)"
+                                />
+                                <input type="button" value="+" @click="addCount(index)"/>
+                            </td>
+                            <td>{{goods.price}}</td>
+                            <td>{{(goods.count*goods.price).toFixed(2)}}</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="scan-list-action">
+                    <div class="btn-box">
+                        <input type="button" value="添加商品"/>
+                        <input type="button" value="清空商品" @click="clearGoodsList"/>
+                    </div>
+                    <div class="txt-box">
+                <span style="margin-right: 10px">
+                  数量：
+                  <span class="goods-type-num">{{sumCount}}</span>
+                </span>
+                        <span
+                        >总金额：<span class="goods-total-price price"
+                        >{{sumPrice}}</span
+                        ></span
+                        >
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- 右侧收银部分 -->
+        <div class="paid-area">
+            <ul class="paid-area-show">
+                <li>
+                    <span>应收</span>
+                    <span class="price">{{sumPrice}}</span>
+                </li>
+                <li>
+                    <span>实收</span>
+                    <span class="price">{{incomePrices}}</span>
+                </li>
+                <li>
+                    <span>找零</span>
+                    <span class="price">{{Change}}</span>
+                </li>
+            </ul>
+            <div class="paid-area-action">
+                <span>现金支付</span>
+                <span @click="incomePrice($event.target.innerHTML)">1</span>
+                <span @click="incomePrice($event.target.innerHTML)">2</span>
+                <span @click="incomePrice($event.target.innerHTML)">3</span>
+                <span @click="otherIncomePrice($event.target.innerHTML)">¥100</span>
+                <span>支付宝</span>
+                <span @click="incomePrice($event.target.innerHTML)">4</span>
+                <span @click="incomePrice($event.target.innerHTML)">5</span>
+                <span @click="incomePrice($event.target.innerHTML)">6</span>
+                <span @click="otherIncomePrice($event.target.innerHTML)">¥50</span>
+
+                <span>微信支付</span>
+                <span @click="incomePrice($event.target.innerHTML)">7</span>
+                <span @click="incomePrice($event.target.innerHTML)">8</span>
+                <span @click="incomePrice($event.target.innerHTML)">9</span>
+                <span @click="otherIncomePrice($event.target.innerHTML)">¥20</span>
+                <span>银行卡</span>
+                <span @click="incomePrice($event.target.innerHTML)">0</span>
+                <span @click="incomePrice($event.target.innerHTML)">00</span>
+                <span @click="incomePrice($event.target.innerHTML)">.</span>
+                <span @click="otherIncomePrice($event.target.innerHTML)">¥10</span>
+                <span>信用卡</span>
+                <span @click="deletes">删除</span>
+                <span @click="clearIncomePrice">清空</span>
+                <span @click="settlement">结算</span>
+            </div>
+            <div class="best-wish">跟着趣学上高速，学习编程不迷路！</div>
+        </div>
+    </div>
+</div>
+<script>
+    const app = new Vue({
+        el: "#app",
+        data: {
+            // 实收金额
+            incomePrices: "0",
+            // 条形码
+            goodsCode: "",
+            goodsList: [
+
+            ],
+            List: [],
+        },
+        methods: {
+            // 扫码之后，与后台进行数据交互
+            showGoods: function (event) {
+                // 通过event事件 扫码得到的数字是 ASCII表中的对应的值
+                //转换数字
+                var num = String.fromCharCode(event.keyCode);
+                this.goodsCode += num;
+                //判断
+                if (event.keyCode == 13) {
+                    console.log("商品条形码：" + this.goodsCode);
+                    //传递给后台，后台根据这个this.goodsCode 查询对应的商品
+                    axios
+                        //这就是向后台发送了一个get请求 ，参数就是 条形码的数据
+                        .get("http://localhost:8080/getGoods?code=" + this.goodsCode)
+                        .then((response) => {
+                            console.log(response.data);
+                            if (response.data.resultQuery == null) {
+                                this.goodsCode = "";
+                                alert("对不起！商品不存在！")
+                            } else {
+                                // 先判断商品列表不为空
+                                if (this.goodsList.length != 0) {
+                                    // 遍历商品列表
+                                    for (let i = 0; i < this.goodsList.length; i++) {
+                                        // 如果商品存在就把数量加一
+                                        if (this.goodsList[i].name == response.data.resultQuery.name) {
+                                            this.goodsList[i].count++;
+                                            this.goodsCode = "";
+                                            return;
+                                        }
+                                    }
+                                    // 如果商品不存在就把商品加到商品列表中
+                                    this.goodsList.push(response.data.resultQuery);
+                                    this.goodsCode = "";
+                                } else {
+                                    // 如果商品列表为空，直接把后台传入的数据赋值给商品列表
+                                    this.goodsList.push(response.data.resultQuery);
+                                    this.goodsCode = "";
+                                }
+                            }
+                        })
+                        .catch(function (error) {
+                            console.log(error)
+                        })
+                }
+            },
+            // 点击清空商品按钮，把货物列表清空
+            clearGoodsList() {
+                this.goodsList = [];
+            },
+            // 点击清空按钮，把实收清空
+            clearIncomePrice() {
+                this.incomePrices = "0";
+            },
+            // 点击加号，数量加一
+            addCount(index) {
+                if (this.goodsList[index].count != 0) {
+                    this.goodsList[index].count++;
+                }
+            },
+            // 点击减号，数量减一
+            reduceCount(index) {
+                this.goodsList[index].count--;
+                if (this.goodsList[index].count == 0) {
+                    this.goodsList.splice(index, 1);
+                }
+            },
+            // 收入判断，如果没输入时，就显示0.00
+            incomePrice(i) {
+                if ((this.incomePrices == "0") && ((i == "00")||(i == "."))) {
+
+                } else if (this.incomePrices == "0") {
+                    this.incomePrices = i;
+                } else {
+                    this.incomePrices += i;
+                }
+            },
+            // 数量输入处理，如果输入了文字和字母就赋值为1
+            countInput(input, index) {
+                input = Number(input);
+                if (Number.isNaN(input)) {
+                    this.goodsList[index].count = 1;
+                } else {
+                    this.goodsList[index].count = input;
+                }
+            },
+            //
+            otherIncomePrice(i){
+                i = i.slice(1, i.length);
+                console.log(typeof Number(i))
+                this.incomePrices = Number(this.incomePrices) + Number(i);
+            },
+            // 右侧收银部分的删除键
+            deletes() {
+                this.incomePrices = this.incomePrices.substring(0, this.incomePrices.length - 1);
+                if (this.incomePrices == "") {
+                    this.incomePrices = "0";
+                }
+            },
+            // 结算
+            settlement() {
+                this.goodsList = [];
+                this.incomePrices = "0";
+            },
+        },
+        computed: {
+            // 总数量计算
+            sumCount() {
+                let sum = 0;
+                this.goodsList.forEach((element) => {
+                    sum += element.count;
+                });
+                return sum;
+            },
+            // 总价格计算
+            sumPrice() {
+                let sum = 0;
+                this.goodsList.forEach((element) => {
+                    sum += element.count * element.price;
+                });
+                return sum.toFixed(2);
+            },
+            // 找零处理，没输入实收时，把找零赋值为0
+            Change() {
+                if (this.incomePrices - this.sumPrice <= 0) {
+                    return "0.00";
+                }
+                return (this.incomePrices - this.sumPrice).toFixed(2);
+            },
+        },
+    });
+</script>
+</body>
+</html>
